@@ -686,6 +686,41 @@ body.spelling .kbd{display:none}
   .spell-reveal.ready{animation-duration:.01ms !important}
 }
 
+
+/* ===== iPad / 主屏 App 适配 ===== */
+html{background:#fbf5e9}
+
+/* iOS 26 会在主屏 App 顶部叠一层 Liquid Glass（网页端关不掉）。
+   把内容压到玻璃带下方，让玻璃只覆盖页面底色。 */
+@media (display-mode: standalone){
+  .wrap{padding-top:max(56px,calc(env(safe-area-inset-top,0px) + 44px));padding-bottom:calc(36px + env(safe-area-inset-bottom,0px))}
+}
+@media (display-mode: standalone) and (max-height:900px){
+  .wrap{padding-top:max(44px,calc(env(safe-area-inset-top,0px) + 36px));padding-bottom:calc(22px + env(safe-area-inset-bottom,0px))}
+}
+
+/* 触屏左右切词：8-bit 像素箭头按钮 */
+.cardnav{
+  display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:4;
+  width:46px;height:64px;padding:0;border:3px solid var(--ink);border-radius:0;
+  background:var(--card);color:var(--ink);cursor:pointer;
+  align-items:center;justify-content:center;
+  box-shadow:4px 4px 0 rgba(59,49,38,.18);
+}
+.cardnav svg{width:28px;height:28px;display:block}
+.cardnav.prev{left:10px}
+.cardnav.next{right:10px}
+.cardnav:active{transform:translateY(calc(-50% + 2px));box-shadow:none}
+
+@media (any-pointer: coarse){
+  .cardnav{display:flex}
+  .face{padding-left:62px;padding-right:62px}
+  body.spelling .face.front{padding-left:62px;padding-right:62px}
+  .kbd{display:none}
+  .grade button small{display:none}
+  .kbd-only{display:none}
+  .spell-submit small{display:none}
+}
 </style>
 </head>
 <body>
@@ -773,9 +808,11 @@ body.spelling .kbd{display:none}
           <div class="back-word"><span id="b-word"></span><span id="b-ph"></span></div>
           <div class="def" id="b-def"></div>
           <div class="ex" id="b-ex"></div>
-          <div class="hint">再看一眼，然后在下面打分 · 1 / 2 / 3</div>
+          <div class="hint">再看一眼，然后在下面打分<span class="kbd-only"> · 1 / 2 / 3</span></div>
         </div>
       </div>
+      <button class="cardnav prev" id="prevword" type="button" aria-label="上一个单词"><svg viewBox="0 0 7 7" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="0" width="1" height="1" fill="currentColor"/><rect x="2" y="1" width="2" height="1" fill="currentColor"/><rect x="1" y="2" width="2" height="1" fill="currentColor"/><rect x="0" y="3" width="3" height="1" fill="currentColor"/><rect x="1" y="4" width="2" height="1" fill="currentColor"/><rect x="2" y="5" width="2" height="1" fill="currentColor"/><rect x="3" y="6" width="1" height="1" fill="currentColor"/></svg></button>
+      <button class="cardnav next" id="nextword" type="button" aria-label="下一个单词"><svg viewBox="0 0 7 7" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="0" width="1" height="1" fill="currentColor"/><rect x="3" y="1" width="2" height="1" fill="currentColor"/><rect x="4" y="2" width="2" height="1" fill="currentColor"/><rect x="4" y="3" width="3" height="1" fill="currentColor"/><rect x="4" y="4" width="2" height="1" fill="currentColor"/><rect x="3" y="5" width="2" height="1" fill="currentColor"/><rect x="3" y="6" width="1" height="1" fill="currentColor"/></svg></button>
     </div>
   </div>
 
@@ -1165,6 +1202,7 @@ function saveState(){
 
 /* ================= 运行态 ================= */
 const $ = id => document.getElementById(id);
+const TOUCH = !!(window.matchMedia && matchMedia('(any-pointer: coarse)').matches);
 let tab = 'new', order = 'random', search = '';
 let roundSize = 0, spellMode = false, blindMode = false;
 let queue = [], qi = 0, lock = false;
@@ -1940,8 +1978,8 @@ function render(){
   rb.classList.remove('ready');
   rb.title = '错 3 次或 30 秒后可用';
   $('f-hint').textContent = blindMode
-    ? '认得出就直接按 1 / 2 / 3 打分 · 点卡片翻面看释义'
-    : '点一下卡片（或空格）翻面看释义';
+    ? (TOUCH ? '认得出就点下面的按钮打分 · 点卡片翻面看释义' : '认得出就直接按 1 / 2 / 3 打分 · 点卡片翻面看释义')
+    : (TOUCH ? '点一下卡片翻面看释义' : '点一下卡片（或空格）翻面看释义');
 
   let meta = r
     ? '上次：' + (LABEL[r.s] || '—') + ' · 第 ' + r.n + ' 次作答 · ' + dueText(r.due)
@@ -2151,6 +2189,14 @@ function move(dir){
   render();
 }
 
+function navWord(dir){
+  if(spellMode){
+    const item = currentItem();
+    if(!(item && item.spellResolved)){ toast('拼写模式：拼完后点「下一个」'); return; }
+  }
+  move(dir);
+}
+
 function toggleMark(){
   const item = currentItem();
   if(!item) return;
@@ -2265,6 +2311,10 @@ function spellBlankInputs(){
 function setSpellMsg(text, cls){
   const el = $('spell-msg');
   if(!el) return;
+  if(TOUCH && text){
+    text = text.replace(/按空格进入下一个/g,'点「下一个」进入下一个')
+               .replace(/按空格继续/g,'点「下一个」继续');
+  }
   el.textContent = text || '';
   el.className = 'spell-msg' + (cls ? ' ' + cls : '');
 }
@@ -2958,6 +3008,8 @@ $('spell-submit').addEventListener('click', e => {
   else submitSpell();
 });
 $('spell-reveal').addEventListener('click', e => { e.stopPropagation(); revealSpell(); });
+$('prevword').addEventListener('click', e => { e.stopPropagation(); navWord(-1); });
+$('nextword').addEventListener('click', e => { e.stopPropagation(); navWord(1); });
 $('spellbtn').addEventListener('click', () => setSpellMode(!spellMode));
 $('blindbtn').addEventListener('click', () => setBlindMode(!blindMode));
 
